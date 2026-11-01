@@ -23,6 +23,7 @@ const os = require('os');
 const path = require('path');
 
 const { findProjectRoot, detectFormatter, resolveFormatterBin } = require('../lib/resolve-formatter');
+const { resolveHookSessionId } = require('../lib/hook-session');
 
 const MAX_STDIN = 1024 * 1024;
 // Total ms budget reserved for all batches (leaves headroom below the 300s Stop timeout)
@@ -76,9 +77,9 @@ function isPluginClonePath(filePath, cwd = process.cwd(), homeDir = os.homedir()
   });
 }
 
-function getAccumFile() {
+function getAccumFile(rawSessionId) {
   const raw =
-    process.env.CLAUDE_SESSION_ID ||
+    rawSessionId ||
     crypto.createHash('sha1').update(process.cwd()).digest('hex').slice(0, 12);
   const sessionId = raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
   return path.join(os.tmpdir(), `ecc-edited-${sessionId}.txt`);
@@ -127,6 +128,20 @@ function findTsConfigDir(filePath) {
   return null;
 }
 
+// tsc --pretty false starts each diagnostic with the file it is about:
+// `src/a.ts(1,14): error TS2322: ...`. Compare that path instead of looking for
+// the edited path anywhere in the line, which let a root `index.ts` claim the
+// errors of `src/index.ts`, and `src/utils.ts` those of `web/src/utils.ts`.
+function diagnosticMatchesFile(line, paths) {
+  const location = /^(.+?)\(\d+,\d+\): /.exec(line);
+  if (!location) return false;
+  const file = location[1].replace(/\\/g, '/');
+  for (const candidate of paths) {
+    if (file === candidate.replace(/\\/g, '/')) return true;
+  }
+  return false;
+}
+
 function typecheckBatch(tsConfigDir, editedFiles, timeoutMs) {
   const isWin = process.platform === 'win32';
   const npxBin = isWin ? 'npx.cmd' : 'npx';
@@ -163,7 +178,7 @@ function typecheckBatch(tsConfigDir, editedFiles, timeoutMs) {
     const relPath = path.relative(tsConfigDir, filePath);
     const candidates = new Set([filePath, relPath]);
     const relevantLines = lines
-      .filter(line => { for (const c of candidates) { if (line.includes(c)) return true; } return false; })
+      .filter(line => diagnosticMatchesFile(line, candidates))
       .slice(0, 10);
     if (relevantLines.length > 0) {
       process.stderr.write(`[Hook] TypeScript errors in ${path.basename(filePath)}:\n`);
@@ -172,8 +187,8 @@ function typecheckBatch(tsConfigDir, editedFiles, timeoutMs) {
   }
 }
 
-function main() {
-  const accumFile = getAccumFile();
+function main(sessionId) {
+  const accumFile = getAccumFile(sessionId);
 
   let raw;
   try {
@@ -229,7 +244,7 @@ function main() {
  */
 function run(rawInput) {
   try {
-    main();
+    main(resolveHookSessionId(rawInput));
   } catch (err) {
     process.stderr.write(`[Hook] stop-format-typecheck error: ${err.message}\n`);
   }
@@ -266,6 +281,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  diagnosticMatchesFile,
   run,
   parseAccumulator,
   isPluginClonePath,

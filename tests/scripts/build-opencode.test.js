@@ -4,6 +4,7 @@
 
 const assert = require("assert")
 const fs = require("fs")
+const { builtinModules } = require("module")
 const os = require("os")
 const path = require("path")
 const { spawnSync } = require("child_process")
@@ -12,12 +13,12 @@ const { getNpmPackEntry } = require("../lib/npm-pack-output")
 const { createManifestInstallPlan, applyInstallPlan } = require("../../scripts/lib/install-executor")
 const { withHookConsent } = require("../../scripts/lib/install/hook-consent")
 
-function checkRuntime(runtimeRoot, extension, loader) {
+function checkRuntime(runtimeRoot, extension, loader, installedHome = false) {
   const check = `
     const assert = require("node:assert/strict")
     const path = require("node:path")
     const { pathToFileURL } = require("node:url")
-    const [root, extension] = process.argv.slice(1)
+    const [root, extension, installedHome] = process.argv.slice(1)
     const load = (name) => import(pathToFileURL(path.join(root, name + extension)).href)
 
     async function main() {
@@ -36,7 +37,16 @@ function checkRuntime(runtimeRoot, extension, loader) {
       assert.deepEqual(Object.keys(entry), ["default"])
       assert.equal(entry.default, plugins.default)
       const logs = []
-      const plugin = await entry.default({
+      // Home installs are auto-discovered. Their barrel must stay inert so
+      // the hooks module is initialized exactly once; published package entry
+      // imports continue to expose the actual plugin.
+      const active = installedHome === "true" ? await load("plugins/ecc-hooks") : entry
+      // The inert stub is a V2 definition object (id + setup), not a factory.
+      if (installedHome === "true") {
+        assert.equal(entry.default.id, "ecc-hooks")
+        assert.equal(typeof entry.default.setup, "function")
+      }
+      const plugin = await active.default({
         client: { app: { log: (event) => logs.push(event.body) } },
         $: () => { throw new Error("Unexpected shell execution") },
         directory: process.cwd(),
@@ -52,11 +62,25 @@ function checkRuntime(runtimeRoot, extension, loader) {
     main().catch((error) => { console.error(error); process.exit(1) })
   `
   const args = loader ? ["--loader", pathToFileURL(loader).href] : []
-  const result = spawnSync(process.execPath, [...args, "-e", check, runtimeRoot, extension], {
-    cwd: path.join(__dirname, "..", ".."),
-    encoding: "utf8",
-  })
-  assert.strictEqual(result.status, 0, result.error?.message || result.stderr || result.stdout)
+  const fixture = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "ecc-opencode-runtime-"))
+  try {
+    const home = path.join(fixture, "home")
+    const project = path.join(fixture, "project")
+    fs.mkdirSync(home)
+    fs.mkdirSync(project)
+    const result = spawnSync(process.execPath, [...args, "-e", check, runtimeRoot, extension, String(installedHome)], {
+      cwd: project,
+      encoding: "utf8",
+      timeout: 30000,
+      env: { ...process.env, HOME: home, USERPROFILE: home,
+        CLAUDE_CONFIG_DIR: path.join(home, ".claude"), ECC_AGENT_DATA_HOME: path.join(home, ".claude"),
+        XDG_CONFIG_HOME: path.join(home, ".config"), XDG_DATA_HOME: path.join(home, ".local", "share"),
+        OPENCODE_CONFIG_DIR: installedHome ? runtimeRoot : path.join(home, ".config", "opencode") },
+    })
+    assert.strictEqual(result.status, 0, result.error?.message || result.stderr || result.stdout)
+  } finally {
+    fs.rmSync(fixture, { recursive: true, force: true })
+  }
 }
 
 function runTest(name, fn) {
@@ -96,6 +120,36 @@ function main() {
       })
       assert.strictEqual(result.status, 0, result.stderr)
       assert.ok(fs.existsSync(distEntry), ".opencode/dist/index.js should exist after build")
+    }],
+    ["built OpenCode bundle only imports packages declared as runtime dependencies", () => {
+      // OpenCode installs npm plugins without devDependencies, so any package
+      // the compiled bundle imports at runtime must ship as a dependency.
+      const runtimeDeps = new Set([
+        ...Object.keys(packageJson.dependencies || {}),
+        ...Object.keys(packageJson.peerDependencies || {}),
+      ])
+      const distDir = path.dirname(distEntry)
+      const imported = new Set()
+      const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const entryPath = path.join(dir, entry.name)
+          if (entry.isDirectory()) {
+            walk(entryPath)
+          } else if (entry.name.endsWith(".js")) {
+            const source = fs.readFileSync(entryPath, "utf8")
+            for (const match of source.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*["']([^"'.][^"']*)["']/g)) {
+              const specifier = match[1]
+              if (specifier.startsWith("node:") || builtinModules.includes(specifier)) continue
+              const parts = specifier.split("/")
+              imported.add(specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0])
+            }
+          }
+        }
+      }
+      walk(distDir)
+      assert.ok(imported.size > 0, "expected the OpenCode bundle to import at least one package")
+      const undeclared = [...imported].filter((name) => !runtimeDeps.has(name)).sort()
+      assert.deepStrictEqual(undeclared, [], `undeclared runtime imports: ${undeclared.join(", ")}`)
     }],
     ["package.json declares a resolvable OpenCode plugin entry", () => {
       assert.strictEqual(packageJson.main, ".opencode/dist/index.js")
@@ -262,6 +316,7 @@ function main() {
           plan.targetRoot,
           ".ts",
           path.join(repoRoot, "tests", "fixtures", "opencode-ts-loader.mjs"),
+          true,
         )
       } finally {
         fs.rmSync(fixture, { recursive: true, force: true })

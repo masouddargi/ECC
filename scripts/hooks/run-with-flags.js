@@ -17,9 +17,14 @@ const { readStdinRaw: readBoundedStdin, resolveMaxStdin } = require('./hook-inpu
 const { buildPreToolUseAdditionalContext } = require('./pretooluse-visible-output');
 const { createHookContextScanner } = require('./hook-input-limits');
 
-const FAIL_CLOSED_ON_TRUNCATION_HOOKS = new Set([
+const GATEGUARD_HOOKS = new Set([
+  'pre:bash:gateguard-fact-force',
   'pre:powershell:gateguard-fact-force',
-  'pre:edit-write:gateguard-fact-force',
+  'pre:edit-write:gateguard-fact-force'
+]);
+
+const FAIL_CLOSED_ON_TRUNCATION_HOOKS = new Set([
+  ...GATEGUARD_HOOKS,
   'pre:mcp-health-check'
 ]);
 
@@ -119,8 +124,7 @@ function resolveLegacySpawnStdout(result) {
 
 function truncatedInputResult(hookId, maxStdin) {
   if (!FAIL_CLOSED_ON_TRUNCATION_HOOKS.has(hookId)) return null;
-  if (hookId === 'pre:powershell:gateguard-fact-force'
-    || hookId === 'pre:edit-write:gateguard-fact-force') {
+  if (GATEGUARD_HOOKS.has(hookId)) {
     const gateGuardValue = String(process.env.ECC_GATEGUARD || '').trim().toLowerCase();
     const legacyDisabled = String(process.env.GATEGUARD_DISABLED || '').trim() === '1';
     if (legacyDisabled || ['0', 'false', 'off', 'disabled', 'disable'].includes(gateGuardValue)) {
@@ -299,6 +303,21 @@ async function main() {
   }
 
   // Legacy path: spawn a child Node process for hooks without run() export
+  // Direct runner invocations also need a deadline. Preserve an earlier
+  // bootstrap deadline instead of granting another full 30 seconds.
+  const inheritedDeadline = Number(process.env.ECC_HOOK_DEADLINE_MS);
+  const deadline = Math.min(
+    Date.now() + 30000,
+    Number.isSafeInteger(inheritedDeadline) && inheritedDeadline > 0
+      ? inheritedDeadline
+      : Infinity
+  );
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    writeStderr(`[Hook] lifecycle time budget exhausted for ${hookId}; skipping legacy hook`);
+    exitWithStdout('', 0);
+    return;
+  }
   const result = spawnSync(process.execPath, [scriptPath], {
     input: raw,
     encoding: 'utf8',
@@ -308,10 +327,11 @@ async function main() {
       ECC_PLUGIN_ROOT: pluginRoot,
       ECC_HOOK_ID: hookId,
       ECC_HOOK_INPUT_TRUNCATED: truncated ? '1' : '0',
-      ECC_HOOK_INPUT_MAX_BYTES: String(MAX_STDIN)
+      ECC_HOOK_INPUT_MAX_BYTES: String(MAX_STDIN),
+      ECC_HOOK_DEADLINE_MS: String(deadline)
     },
     cwd: process.cwd(),
-    timeout: 30000
+    timeout: remaining
   });
 
   const legacyStdout = sanitizeEcho(resolveLegacySpawnStdout(result));

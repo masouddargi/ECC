@@ -104,10 +104,13 @@ function buildCopyFileOperation({
   strategy,
   contentTransform,
 }) {
-  // Copilot's agent and workflow transforms are textual. Their directories may
-  // also contain binary assets and executable helpers, which must keep bytes.
+  // Agent frontmatter and workflow transforms are textual Markdown projections.
+  // Their directories may also contain binary assets and executable helpers,
+  // which must keep their bytes intact.
   const applicableTransform = (contentTransform === 'copilot-workflow-paths'
-    || contentTransform === 'copilot-agent-frontmatter')
+    || contentTransform === 'copilot-agent-frontmatter'
+    || contentTransform === 'antigravity-agent-frontmatter'
+    || contentTransform === 'qwen-agent-frontmatter')
     && !/\.md$/i.test(sourceRelativePath) ? undefined : contentTransform;
   return {
     kind: 'copy-file',
@@ -287,7 +290,17 @@ function createManifestInstallPlan(options = {}) {
   const adapter = getInstallTargetAdapter(target);
   const materializedOperations = plan.operations.flatMap(operation => (
     materializeScaffoldOperation(sourceRoot, operation)
-  ));
+  )).map(operation => {
+    // Persist this projection so install, doctor and repair compare the same
+    // native component names rather than restoring plugin-only references.
+    if (['claude', 'claude-project'].includes(target)
+      && operation.kind === 'copy-file'
+      && /\.(md|mdx|markdown)$/i.test(operation.destinationPath)
+      && !operation.contentTransform) {
+      return { ...operation, contentTransform: 'claude-manual-plugin-namespace' };
+    }
+    return operation;
+  });
   const ruleLanguages = Array.isArray(options.ruleLanguages) ? [...options.ruleLanguages] : [];
   const operations = dedupeCopyFileOperations(
     options.legacyMode && target === 'antigravity'

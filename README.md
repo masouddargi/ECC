@@ -20,6 +20,7 @@
 <p align="center">
   <strong>Language:</strong>
   <a href="README.md">English</a> |
+  <a href="docs/ar/README.md">العربية</a> |
   <a href="docs/pt-BR/README.md">Português (Brasil)</a> |
   <a href="README.zh-CN.md">简体中文</a> |
   <a href="docs/zh-TW/README.md">繁體中文</a> |
@@ -138,15 +139,15 @@ Instead of rebuilding that process in every prompt, you install it once and make
 
 > Optimize the context window. Persist everything else.
 
-ECC is MIT-licensed open source. It works best with Claude Code today, has a supported Codex sync path, and provides capability-limited adapters for Cursor, OpenCode, Gemini, Zed, GitHub Copilot, Antigravity, Qwen, and other harnesses. See the [support status matrix](#platform-support) before assuming feature parity.
+ECC is MIT-licensed open source. It works best with Claude Code today, has native Codex and Qoder plugin paths, and provides capability-limited adapters for Cursor, OpenCode, Gemini, Zed, GitHub Copilot, Antigravity, Qwen, and other harnesses. See the [support status matrix](#platform-support) before assuming feature parity.
 
-Access to 71 agents, 302 skills, and 95 legacy command shims, plus hooks, rules, memory, continuous learning, and AgentShield security scanning. The agents are specialized for planning, review, build repair, security, architecture, and domain work.
+Access to 71 agents, 314 skills, and 98 legacy command shims, plus hooks, rules, memory, continuous learning, and AgentShield security scanning. The agents are specialized for planning, review, build repair, security, architecture, and domain work.
 
 | Included         |       Count | What it gives you                                                                    |
 | ---------------- | ----------: | ------------------------------------------------------------------------------------ |
 | Agents           |   71 agents | Planning, review, build repair, security, architecture, and domain work              |
-| Skills           |  302 skills | TDD, research, security, docs, frontend, data, ML, operations, and more              |
-| Commands         | 95 commands | Convenient entry points while ECC moves to a skills-first surface                    |
+| Skills           |  314 skills | TDD, research, security, docs, frontend, data, ML, operations, and more              |
+| Commands         | 98 commands | Convenient entry points while ECC moves to a skills-first surface                    |
 | Hooks and memory |     Runtime | Enforcement, session summaries, continuous learning, instincts, and context controls |
 | Rules            |   Selective | Always-loaded standards you choose by language or project                            |
 | AgentShield      |    Included | Scanning for prompts, hooks, MCP config, permissions, secrets, and agent files       |
@@ -383,6 +384,31 @@ You can also open the ECC repository directly in Codex for a project-local setup
 
 For repo navigation, surface ownership, and PR diff packet guidance, read the [Codex ECC Navigation Map](docs/CODEX-NAVIGATION-GUIDE.md). See the [.codex plugin notes](.codex-plugin/README.md) for native lifecycle details.
 
+### Qoder CLI and IDE
+
+ECC ships a native Qoder plugin that reuses the canonical skills, agents,
+95 legacy command shims, and the pinned `chrome-devtools` MCP definition. From a
+reviewed checkout, validate and install it with Qoder CLI:
+
+```bash
+qoder plugins validate . --strict
+qoder plugins install .
+qoder plugins list
+```
+
+For Qoder IDE, upload a ZIP of the repository root. The ZIP root must contain
+`.qoder-plugin/` together with `skills/`, `agents/`, `commands/`, `hooks/`,
+`scripts/`, and `.mcp.json`; uploading only the manifest directory or one
+`SKILL.md` omits required resources.
+
+The universal Node.js 18+ requirement applies to Qoder's non-interactive hook
+environment. The MCP server also requires `npx` and network access on first use.
+Qoder receives one reviewed, cross-platform `SessionStart` bootstrap using
+`QODER_PLUGIN_ROOT` and exec-form arguments. ECC does not copy the full Claude
+hook profile into Qoder: blocking tool hooks, async stop jobs, and
+Claude-specific matchers remain outside this initial native integration. See
+the [.qoder-plugin notes](.qoder-plugin/README.md) for the exact boundary.
+
 ### Other agents and editors
 
 <details>
@@ -609,6 +635,12 @@ Without `ccg-workflow`, these `multi-*` commands will not run correctly.
 </details>
 
 <details>
+<summary><strong>Astra review requires the Codex CLI</strong></summary>
+
+`/astra-review` sends Claude-written code to GPT-6-Astra for an independent cross-provider review. It runs the locally installed [Codex CLI](https://github.com/openai/codex) with your ChatGPT login (`codex login`); no OpenAI API key is needed, and API keys in your environment are not forwarded. Invoking the command is your consent to send that diff to OpenAI. Setup, scopes, push gating, and troubleshooting are in the [Astra Review Guide](docs/ASTRA-REVIEW-GUIDE.md).
+</details>
+
+<details>
 <summary><strong>Reset, repair, or uninstall</strong></summary>
 
 ### Reset / Uninstall ECC
@@ -661,6 +693,7 @@ Start with the workflow you need, not the full catalog.
 | Building a feature | `/ecc:plan "describe the feature"`, then `tdd-workflow` |
 | Fixing a bug | Reproduce it with a failing test, then use `tdd-workflow` |
 | Reviewing new code | `/code-review` for a fresh-context review |
+| Triaging a GitHub issue | `/ecc:issue-review <number>` (plugin) or `/issue-review <number>` (manual install) to verify it against the code and draft a reply |
 | Repairing a build | `/build-fix` |
 | Cleaning a codebase | `/refactor-clean` |
 | Checking context pressure | `/context-budget` |
@@ -701,6 +734,7 @@ Skills are the canonical workflow surface; maintained slash entries stay availab
 | Design system architecture | `/ecc:plan` + architect agent | architect |
 | Write code with tests first | `tdd-workflow` skill | tdd-guide |
 | Review code I just wrote | `/code-review` | code-reviewer |
+| Review a GitHub issue | `/ecc:issue-review` (plugin), `/issue-review` (manual install) | — (issue-review skill) |
 | Fix a failing build | `/build-fix` | build-error-resolver |
 | Run end-to-end tests | `e2e-testing` skill | e2e-runner |
 | Find security vulnerabilities | `/security-scan` | security-reviewer |
@@ -827,8 +861,8 @@ Stable graduation of the 2.0 line: control-pane substrate, worktree lifecycle se
 ```text
 ECC/
 |-- agents/           # 71 specialized subagents for delegation
-|-- skills/           # 293 reusable workflows loaded on demand
-|-- commands/         # 94 maintained slash-command shims
+|-- skills/           # 314 reusable workflows loaded on demand
+|-- commands/         # 98 maintained slash-command shims
 |-- rules/            # opt-in common and language standards
 |-- hooks/            # runtime automation and enforcement
 |-- scripts/          # install, repair, sync, orchestration, and checks
@@ -929,6 +963,7 @@ ECC/
 |   |-- springboot-verification/    # Spring Boot verification
 |   |-- configure-ecc/              # Interactive installation wizard
 |   |-- security-scan/              # AgentShield security auditor integration
+|   |-- issue-review/               # GitHub issue review: verify, dedupe, severity, draft reply
 |   |-- java-coding-standards/      # Java coding standards
 |   |-- jpa-patterns/               # JPA/Hibernate patterns
 |   |-- postgres-patterns/          # PostgreSQL optimization patterns
@@ -960,6 +995,7 @@ ECC/
 |-- commands/         # Maintained slash-entry compatibility; prefer skills/
 |   |-- plan.md             # /plan - Implementation planning
 |   |-- code-review.md      # /code-review - Quality review
+|   |-- issue-review.md     # /issue-review - GitHub issue review
 |   |-- build-fix.md        # /build-fix - Fix build errors
 |   |-- refactor-clean.md   # /refactor-clean - Dead code removal
 |   |-- quality-gate.md     # /quality-gate - Verification gate
@@ -1182,7 +1218,7 @@ This repo is the raw code. The guides explain everything.
 | Parallelization | Git worktrees, cascade method, when to scale instances |
 | Subagent Orchestration | The context problem, iterative retrieval pattern |
 
-[Commands Quick Reference](./COMMANDS-QUICK-REF.md) | [Manual Adaptation Guide](docs/MANUAL-ADAPTATION-GUIDE.md) | [Troubleshooting FAQ](./TROUBLESHOOTING.md) | [Roadmap](docs/ROADMAP.md)
+[Commands Quick Reference](./COMMANDS-QUICK-REF.md) | [Manual Adaptation Guide](docs/MANUAL-ADAPTATION-GUIDE.md) | [Astra Review Guide](docs/ASTRA-REVIEW-GUIDE.md) | [Troubleshooting FAQ](./TROUBLESHOOTING.md) | [Roadmap](docs/ROADMAP.md)
 
 ## Why Choose ECC?
 
@@ -1292,10 +1328,11 @@ Treat `stable`, `beta`, `experimental`, and `instruction-only` below as capabili
 |---|---|---|---|
 | Claude Code | Stable primary | Plugin or selective installer | The plugin advertises the installed catalog to the model; use a selective/manual profile when context footprint matters. Optional shell-backed skills are not portable to every OS. |
 | Codex | Supported native plugin | Codex marketplace plugin or repo config | Native hooks require an explicit trust decision and do not use Claude's hook profiles. The legacy sync is compatibility-only. |
+| Qoder | Supported native plugin | Local plugin directory in Qoder CLI or ZIP upload in Qoder IDE | Loads the canonical skills, agents, commands, and MCP config; only the reviewed SessionStart hook is enabled, and Node.js 18+ must be on the non-interactive PATH. |
 | Cursor | Beta project adapter | Selective installer into `.cursor/` | Agent discovery varies by Cursor build; hook events use profile-gated dispatchers, but full Claude feature parity is not claimed. |
 | OpenCode | Beta built plugin | Build plugin, then selective installer | ECC ships a subset of the catalog; connect a provider and select a model in OpenCode ([#2617](https://github.com/affaan-m/ECC/issues/2617)). |
 | GitHub Copilot Chat | Instruction-only | Checked-in instructions and prompt files | ECC hooks are not adapted. |
-| GitHub Copilot CLI | Beta project adapter | `--target copilot` places skills and adapted agents in `.github/` | ECC hooks, rules, and command shims are not installed by this target. |
+| GitHub Copilot CLI | Beta project adapter | `--target copilot` places skills, adapted agents, and converted rules in `.github/` | ECC hooks and command shims are not installed by this target. |
 | Gemini, Zed, Antigravity, Qwen, Hermes, OpenClaw, Kimi, CodeBuddy, JoyCode | Experimental/minimal adapters | Harness-specific selective target | File placement and instruction portability are tested; full Claude feature parity is not claimed. |
 
 <details>
@@ -1768,8 +1805,10 @@ inventory to see what this checkout installs; a count is not a capability grant.
 Claude-only agent frontmatter (`model`, `tools`, `color`) is dropped during the
 copy: Copilot resolves the model from your own configuration, and it governs
 tool access per session through `--allow-tool`/`--deny-tool` rather than through
-agent frontmatter. ECC's rules, commands, and hooks are not installed by this
-target.
+agent frontmatter. Rules are installed under `.github/instructions/ecc/` as
+`.instructions.md` files, with the Claude-style `paths:` frontmatter converted
+to Copilot's `applyTo:` glob list (rules without `paths` become `applyTo:
+"**"`). ECC's commands and hooks are not installed by this target.
 
 #### Feature coverage
 
@@ -1785,6 +1824,7 @@ target.
 | Commit message format | Per-task instruction in `settings.json` |
 | Skills | Native discovery in Copilot CLI (`.github/skills/`, `.agents/skills/`) |
 | Agents / delegation | Copilot CLI custom agents (`.github/agents/`, `--agent`) |
+| Rules | Path-specific instructions (`.github/instructions/ecc/`, `applyTo:` globs) |
 | Hooks / automation | ECC's hooks are not ported (Copilot CLI has its own plugin hook system) |
 
 #### Limitations
@@ -1828,19 +1868,26 @@ Add to `~/.claude/settings.json`:
 {
   "model": "sonnet",
   "env": {
-    "MAX_THINKING_TOKENS": "10000",
+    "CLAUDE_CODE_EFFORT_LEVEL": "medium",
     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "50",
     "CLAUDE_CODE_SUBAGENT_MODEL": "haiku"
   }
 }
 ```
 
+The effort setting requires a model that supports effort controls. On Amazon Bedrock,
+Google Cloud's Agent Platform, and Microsoft Foundry, the `sonnet` alias currently
+resolves to Sonnet 4.5, which does not support effort controls. Select an effort-capable
+model available from your provider, or omit `CLAUDE_CODE_EFFORT_LEVEL`.
+
 | Setting | Default | Recommended | Impact |
 |---------|---------|-------------|--------|
 | `model` | opus | **sonnet** | ~60% cost reduction; handles 80%+ of coding tasks |
-| `MAX_THINKING_TOKENS` | 31,999 | **10,000** | ~70% reduction in hidden thinking cost per request |
+| `CLAUDE_CODE_EFFORT_LEVEL` | Model-dependent | **medium**, if supported | Controls adaptive reasoning depth on models that support effort controls; lower effort trades reasoning depth for latency and cost |
 | `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` | 95 | **50** | Compacts earlier, better quality in long sessions |
 | `ECC_CONTEXT_MONITOR_COST_WARNINGS` | on | **off for subscription users** | Suppresses agent-facing API-rate estimate warnings while keeping context/scope/loop warnings |
+
+For fixed-budget models, `MAX_THINKING_TOKENS` controls the thinking budget. On Opus 4.6 or Sonnet 4.6, also set `CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1` to use that mode. A positive token value does not cap adaptive reasoning; see the [performance rule](rules/common/performance.md#extended-thinking--plan-mode).
 
 Switch to Opus only when you need deep architectural reasoning:
 ```
@@ -2074,6 +2121,10 @@ node scripts/codex/check-plugin-cache.js
 ```
 
 If it reports unresolved parent references, refresh the native cache with `codex plugin marketplace upgrade ecc`, run `codex plugin add ecc@ecc` again, and restart Codex. Registration in `codex plugin list` confirms the marketplace entry, while the cache check verifies that the installed manifest can resolve its skills, MCP configuration, and assets. Use `bash scripts/sync-ecc-to-codex.sh` only when you intentionally need the legacy copied-configuration compatibility path.
+
+If Codex 0.164.0 reports `unsupported plugin entry type` after you install hook
+dependencies into the cache, see the [cache-local runtime dependency procedure](.codex-plugin/README.md#runtime-dependencies-and-codex-01640-cache-checks).
+It avoids npm executable symlinks without disabling Codex's hook trust checks.
 </details>
 
 More answers: [TROUBLESHOOTING.md](TROUBLESHOOTING.md) covers memory, hooks, installation, performance, and common error messages. [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) tracks workarounds for open Claude Code bugs.
